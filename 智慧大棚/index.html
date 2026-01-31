@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartGreen Pro - 智慧环境监测</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        /* === 智能主题变量系统 === */
+        :root {
+            /* 默认白天模式 */
+            --bg-gradient: linear-gradient(135deg, #f0f9ff 0%, #dcfce7 100%);
+            --text-main: #0f172a;
+            --text-sub: #64748b;
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.9);
+            --glass-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+            --sidebar-bg: rgba(255, 255, 255, 0.8);
+            --card-hover-bg: white;
+            
+            --primary: #10b981;
+            --primary-glow: rgba(16, 185, 129, 0.4);
+            --danger: #ef4444;
+            --accent: #6366f1;
+            --radius-lg: 20px;
+        }
+
+        /* 🌙 夜间模式 (自动切换) */
+        body.theme-night {
+            --bg-gradient: linear-gradient(to bottom, #0f172a 0%, #312e81 100%);
+            --text-main: #f1f5f9;
+            --text-sub: #94a3b8;
+            --glass-bg: rgba(30, 41, 59, 0.75); /* 深色玻璃 */
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            --sidebar-bg: rgba(15, 23, 42, 0.85);
+            --card-hover-bg: rgba(51, 65, 85, 0.9);
+        }
+
+        /* 🚨 报警模式 (全屏红光) */
+        body.theme-alarm {
+            --bg-gradient: linear-gradient(135deg, #450a0a 0%, #7f1d1d 100%); /* 深红背景 */
+            --glass-bg: rgba(254, 226, 226, 0.9); /* 偏红的亮色玻璃，保证可读性 */
+            --text-main: #450a0a;
+            --text-sub: #7f1d1d;
+            --glass-border: #fca5a5;
+            animation: alarm-pulse 2s infinite ease-in-out; /* 全屏呼吸 */
+        }
+
+        @keyframes alarm-pulse {
+            0% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); }
+            50% { box-shadow: inset 0 0 100px 30px rgba(220, 38, 38, 0.6); }
+            100% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, sans-serif; outline: none; }
+        
+        body { 
+            background: var(--bg-gradient);
+            height: 100vh; display: flex; color: var(--text-main); overflow: hidden;
+            transition: background 1s ease, color 0.5s ease; /* 平滑过渡 */
+        }
+
+        /* 侧边栏 */
+        .sidebar { 
+            width: 260px; 
+            background: var(--sidebar-bg);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--glass-border); 
+            padding: 24px; display: flex; flex-direction: column; z-index: 10; flex-shrink: 0;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.02);
+            transition: all 0.5s ease;
+        }
+        .brand { 
+            font-size: 24px; font-weight: 900; 
+            color: var(--primary);
+            margin-bottom: 40px; display: flex; align-items: center; gap: 10px; 
+        }
+        .nav-item { 
+            padding: 14px 18px; color: var(--text-sub); border-radius: 12px; margin-bottom: 8px; cursor: pointer; font-weight: 600; 
+            transition: all 0.2s; display: flex; align-items: center; gap: 12px; font-size: 14px; 
+        }
+        .nav-item:hover { background: var(--glass-bg); color: var(--primary); }
+        .nav-item.active { 
+            background: var(--primary); color: white; 
+            box-shadow: 0 4px 12px var(--primary-glow);
+        }
+
+        /* 主内容 */
+        .main-content { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; z-index: 5; gap: 20px; }
+        
+        /* 顶部栏 */
+        .top-bar { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .page-title h2 { font-size: 24px; font-weight: 800; color: var(--text-main); transition: color 0.5s; }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 50px; font-size: 13px; font-weight: 600; }
+        .status-ok { background: rgba(16, 185, 129, 0.2); color: var(--primary); border: 1px solid var(--primary); }
+        .status-err { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+
+        .alarm-alert, .normal-alert { display: none; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; margin-left: 16px; }
+        .alarm-alert { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); animation: pulse 1s infinite; }
+        .normal-alert { background: rgba(16, 185, 129, 0.2); color: var(--primary); border: 1px solid var(--primary); }
+        .show-flex { display: inline-flex !important; }
+        @keyframes pulse { 0% { opacity: 0.8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.8; transform: scale(1); } }
+
+        .clock-container { display: flex; align-items: center; gap: 10px; background: var(--glass-bg); padding: 6px 6px 6px 16px; border-radius: 50px; box-shadow: var(--glass-shadow); }
+        .date-text { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text-main); font-size: 14px; }
+        .btn-sync-mini { width: 32px; height: 32px; border-radius: 50%; border: none; cursor: pointer; background: rgba(0,0,0,0.05); color: var(--text-sub); transition: 0.2s; display: flex; align-items: center; justify-content: center; }
+        .btn-sync-mini:hover { background: var(--accent); color: white; transform: rotate(180deg); }
+
+        /* 通用卡片 (样式随变量自动变) */
+        .glass-card { 
+            background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); 
+            border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--glass-shadow); 
+            transition: all 0.3s; 
+        }
+        .glass-card:hover { transform: translateY(-3px); background: var(--card-hover-bg); }
+        .panel-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; color: var(--text-main); }
+
+        /* 顶部统计卡片 */
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; flex-shrink: 0; }
+        .stat-item { display: flex; align-items: center; gap: 16px; padding: 24px; }
+        .icon-box { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .card-temp .icon-box { color: #ef4444; background: #fef2f2; }
+        .card-hum .icon-box { color: #3b82f6; background: #eff6ff; }
+        .card-light .icon-box { color: #f59e0b; background: #fffbeb; }
+        .val-box h4 { font-size: 13px; color: var(--text-sub); margin-bottom: 4px; }
+        .val-box .number { font-size: 32px; font-weight: 800; color: var(--text-main); line-height: 1; }
+        .val-box .unit { font-size: 14px; color: var(--text-sub); margin-left: 4px; font-weight: 600; }
+
+        /* 历史趋势 */
+        .chart-section { flex-shrink: 0; display: flex; gap: 20px; }
+        .chart-main { flex: 1; display: flex; flex-direction: column; }
+        .chart-sidebar { width: 140px; display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+        
+        .stat-mini-box { background: rgba(255,255,255,0.2); padding: 12px; border-radius: 12px; text-align: center; border: 1px solid var(--glass-border); }
+        .sm-label { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+        .sm-val { font-size: 20px; font-weight: 800; color: var(--text-main); }
+        .val-max { color: var(--danger); } .val-min { color: var(--primary); } .val-avg { color: #0ea5e9; }
+        
+        .tab-btn { padding: 4px 12px; border: none; background: transparent; border-radius: 6px; color: var(--text-sub); font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 2px 5px var(--primary-glow); }
+
+        /* 底部布局 */
+        .bottom-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+            gap: 20px; 
+            padding-bottom: 20px; 
+        }
+
+        /* 阈值设定 */
+        .threshold-row { 
+            display: flex; align-items: center; justify-content: space-between; 
+            background: rgba(255,255,255,0.3); padding: 12px; border-radius: 12px; margin-bottom: 10px;
+            border: 1px solid var(--glass-border);
+        }
+        .th-info { display: flex; flex-direction: column; gap: 2px; }
+        .th-label { font-size: 13px; font-weight: 700; color: var(--text-main); }
+        .th-val { font-size: 12px; color: var(--primary); font-weight: 600; }
+        
+        .th-actions { display: flex; align-items: center; gap: 6px; }
+        .th-input { 
+            width: 50px; padding: 6px 4px; text-align: center; border-radius: 6px; 
+            border: 1px solid var(--glass-border); background: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; color: #334155;
+            transition: all 0.2s;
+        }
+        .th-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-glow); }
+        .btn-check { 
+            width: 32px; height: 32px; border: none; background: var(--text-main); color: var(--glass-bg); 
+            border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+        }
+        .btn-check:hover { opacity: 0.8; transform: scale(1.05); }
+
+        /* 异常记录 */
+        .log-list { height: 200px; overflow-y: auto; padding-right: 4px; }
+        .log-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 12px; align-items: center; }
+        .log-time { color: var(--text-sub); font-family: monospace; }
+        .log-tag { background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 2px 6px; border-radius: 4px; font-weight: 700; border: 1px solid rgba(239, 68, 68, 0.2); }
+
+        /* 远程控制 */
+        .control-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
+        .control-item:last-child { border-bottom: none; }
+        .control-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-main); }
+        .btn-group { display: flex; gap: 4px; background: rgba(0,0,0,0.05); padding: 3px; border-radius: 8px; }
+        .c-btn { 
+            padding: 4px 10px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; 
+            cursor: pointer; color: var(--text-sub); background: transparent; transition: 0.2s; 
+        }
+        .c-btn.active { background: white; color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .c-btn.power-on { color: var(--danger); }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="brand"><i class="ri-leaf-fill"></i> SmartGreen</div>
+        <nav>
+            <div class="nav-item active"><i class="ri-dashboard-line"></i> 监控总览</div>
+            <div class="nav-item"><i class="ri-settings-4-line"></i> 系统设置</div>
+        </nav>
+        <div style="margin-top: auto;">
+            <div class="nav-item" style="color: var(--danger);" onclick="location.href='login.html'">
+                <i class="ri-logout-box-line"></i> 退出登录
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="top-bar">
+            <div class="page-title">
+                <div style="display:flex; align-items:center; gap: 12px;">
+                    <h2>环境监测中心</h2>
+                    <span id="api-indicator" class="status-badge status-err"><i class="ri-loader-4-line"></i> 连接中...</span>
+                    <div id="alarm-alert" class="alarm-alert"><i class="ri-alarm-warning-fill"></i> 异常报警</div>
+                    <div id="normal-alert" class="normal-alert show-flex"><i class="ri-shield-check-fill"></i> 运行正常</div>
+                </div>
+                <p style="color:var(--text-sub); margin-top:4px; font-size:13px;">OneNET 云平台实时数据接入 | 设备ID: test123</p>
+            </div>
+            
+            <div class="clock-container">
+                <div class="date-text" id="clock">Loading...</div>
+                <button class="btn-sync-mini" id="btn-time-sync" onclick="syncSystemTime()" title="同步系统时间">
+                    <i class="ri-refresh-line"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="glass-card stat-item card-temp">
+                <div class="icon-box"><i class="ri-temp-hot-line"></i></div>
+                <div class="val-box">
+                    <h4>空气温度</h4>
+                    <div><span class="number" id="val-temp">--</span><span class="unit">℃</span></div>
+                </div>
+            </div>
+            <div class="glass-card stat-item card-hum">
+                <div class="icon-box"><i class="ri-drop-line"></i></div>
+                <div class="val-box">
+                    <h4>空气湿度</h4>
+                    <div><span class="number" id="val-hum">--</span><span class="unit">%</span></div>
+                </div>
+            </div>
+            <div class="glass-card stat-item card-light">
+                <div class="icon-box"><i class="ri-sun-line"></i></div>
+                <div class="val-box">
+                    <h4>光照强度</h4>
+                    <div><span class="number" id="val-light">--</span><span class="unit">%</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card chart-section">
+            <div class="chart-main">
+                <div class="panel-title">
+                    <span><i class="ri-line-chart-line"></i> 历史趋势</span>
+                    <div style="background: rgba(0,0,0,0.05); padding: 3px; border-radius: 8px;">
+                        <button class="tab-btn active" onclick="switchHistoryChart('temp', this)">温度</button>
+                        <button class="tab-btn" onclick="switchHistoryChart('hum', this)">湿度</button>
+                        <button class="tab-btn" onclick="switchHistoryChart('light', this)">光照</button>
+                    </div>
+                </div>
+                <div id="mainChart" style="width: 100%; height: 260px;"></div>
+            </div>
+            <div class="chart-sidebar">
+                <div class="stat-mini-box">
+                    <div class="sm-label">Max</div>
+                    <div class="sm-val val-max" id="hist-max">--</div>
+                </div>
+                <div class="stat-mini-box">
+                    <div class="sm-label">Min</div>
+                    <div class="sm-val val-min" id="hist-min">--</div>
+                </div>
+                <div class="stat-mini-box">
+                    <div class="sm-label">Avg</div>
+                    <div class="sm-val val-avg" id="hist-avg">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-grid">
+            
+            <div class="glass-card">
+                <div class="panel-title"><i class="ri-equalizer-line"></i> 智能阈值</div>
+                
+                <div class="threshold-row">
+                    <div class="th-info">
+                        <span class="th-label">温度 (℃)</span>
+                        <span class="th-val" id="disp-temp">-- ~ --</span>
+                    </div>
+                    <div class="th-actions">
+                        <input class="th-input" id="in-temp-min" type="number" placeholder="Min">
+                        <span style="color:var(--text-sub)">-</span>
+                        <input class="th-input" id="in-temp-max" type="number" placeholder="Max">
+                        <button class="btn-check" onclick="applyThresholds('temp')"><i class="ri-check-line"></i></button>
+                    </div>
+                </div>
+                
+                <div class="threshold-row">
+                    <div class="th-info">
+                        <span class="th-label">湿度 (%)</span>
+                        <span class="th-val" id="disp-hum">-- ~ --</span>
+                    </div>
+                    <div class="th-actions">
+                        <input class="th-input" id="in-hum-min" type="number" placeholder="Min">
+                        <span style="color:var(--text-sub)">-</span>
+                        <input class="th-input" id="in-hum-max" type="number" placeholder="Max">
+                        <button class="btn-check" onclick="applyThresholds('hum')"><i class="ri-check-line"></i></button>
+                    </div>
+                </div>
+
+                <div class="threshold-row">
+                    <div class="th-info">
+                        <span class="th-label">光照 (%)</span>
+                        <span class="th-val" id="disp-light">-- ~ --</span>
+                    </div>
+                    <div class="th-actions">
+                        <input class="th-input" id="in-light-min" type="number" placeholder="Min">
+                        <span style="color:var(--text-sub)">-</span>
+                        <input class="th-input" id="in-light-max" type="number" placeholder="Max">
+                        <button class="btn-check" onclick="applyThresholds('light')"><i class="ri-check-line"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="panel-title">
+                    <span><i class="ri-alarm-warning-line"></i> 异常记录</span>
+                    <i class="ri-delete-bin-line" style="cursor:pointer; color:var(--text-sub)" onclick="clearLogs()"></i>
+                </div>
+                <div id="alarm-log-list" class="log-list">
+                    <div style="text-align:center; color:var(--text-sub); margin-top:60px;">暂无异常</div>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="panel-title"><i class="ri-gamepad-line"></i> 远程控制</div>
+                
+                <div class="control-item">
+                    <div class="control-label"><i class="ri-lightbulb-line"></i> 补光灯</div>
+                    <div class="btn-group">
+                        <button class="c-btn" id="btn-light-mode" onclick="toggleMode('light')">自动</button>
+                        <button class="c-btn" id="btn-light-power" onclick="togglePower('light')">OFF</button>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <div class="control-label"><i class="ri-windy-line"></i> 通风扇</div>
+                    <div class="btn-group">
+                        <button class="c-btn" id="btn-fan-mode" onclick="toggleMode('fan')">自动</button>
+                        <button class="c-btn" id="btn-fan-power" onclick="togglePower('fan')">OFF</button>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <div class="control-label"><i class="ri-mist-line"></i> 加湿器</div>
+                    <div class="btn-group">
+                        <button class="c-btn" id="btn-spray-mode" onclick="toggleMode('spray')">自动</button>
+                        <button class="c-btn" id="btn-spray-power" onclick="togglePower('spray')">OFF</button>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <div class="control-label"><i class="ri-fire-line"></i> 加热片</div>
+                    <div class="btn-group">
+                        <button class="c-btn" id="btn-heater-mode" onclick="toggleMode('heater')">自动</button>
+                        <button class="c-btn" id="btn-heater-power" onclick="togglePower('heater')">OFF</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // ================= 配置区域 =================
+        const URL_LATEST = "https://iot-api.heclouds.com/thingmodel/query-device-property?product_id=fNEs9rp3YO&device_name=test123";
+        const URL_HISTORY = "https://iot-api.heclouds.com/thingmodel/query-device-property-history";
+        const URL_CONTROL = "https://iot-api.heclouds.com/thingmodel/set-device-desired-property";
+        const AUTH_TOKEN = "version=2022-05-01&res=userid%2F489093&et=1805827631&method=sha1&sign=UGFZZU%2Bp3AyOJcE%2FPmGNJ3PBXrY%3D";
+        const API_HEADERS = { "authorization": AUTH_TOKEN, "Accept": "application/json, text/plain, */*" };
+
+        let currentData = {
+            temp: { val: 0, min: 0, max: 100, name: "温度", unit: "℃" },
+            hum: { val: 0, min: 0, max: 100, name: "湿度", unit: "%" },
+            light: { val: 0, min: 0, max: 100, name: "光照", unit: "%" }
+        };
+        let deviceState = { light: { on: false, mode: false }, fan: { on: false, mode: false }, spray: { on: false, mode: false }, heater: { on: false, mode: false } };
+        let historyCache = { temp: { x: [], y: [] }, hum: { x: [], y: [] }, light: { x: [], y: [] } };
+        let myChart = null;
+        let currentChartType = 'temp';
+
+        function animateValue(obj, start, end, duration) {
+            if (start === end) return;
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                const val = progress * (end - start) + start;
+                obj.innerHTML = (end % 1 === 0) ? Math.floor(val) : val.toFixed(1);
+                if (progress < 1) window.requestAnimationFrame(step); else obj.innerHTML = end;
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        async function fetchLatestData() {
+            const statusEl = document.getElementById('api-indicator');
+            try {
+                const response = await fetch(URL_LATEST, { headers: API_HEADERS });
+                if (!response.ok) throw new Error("Network Error");
+                const json = await response.json();
+                
+                if (json.code === 0 && json.data) {
+                    statusEl.innerHTML = '<i class="ri-wifi-line"></i> 实时监控中';
+                    statusEl.className = "status-badge status-ok";
+                    renderLatest(json.data);
+                } else {
+                    statusEl.innerHTML = '<i class="ri-error-warning-line"></i> 数据异常';
+                    statusEl.className = "status-badge status-err";
+                }
+            } catch (error) {
+                statusEl.innerHTML = '<i class="ri-close-circle-line"></i> 连接断开';
+                statusEl.className = "status-badge status-err";
+            }
+        }
+
+        function renderLatest(dataArray) {
+            const findVal = (id) => dataArray.find(x => x.identifier === id)?.value;
+            const newTemp = parseFloat(findVal('temperature') || 0);
+            const newHum = parseFloat(findVal('humidity') || 0);
+            const newLight = parseInt(findVal('light') || 0);
+
+            const tempEl = document.getElementById('val-temp');
+            const humEl = document.getElementById('val-hum');
+            const lightEl = document.getElementById('val-light');
+
+            if(tempEl.innerText === '--') tempEl.innerText = newTemp; else animateValue(tempEl, parseFloat(tempEl.innerText), newTemp, 1000);
+            if(humEl.innerText === '--') humEl.innerText = newHum; else animateValue(humEl, parseFloat(humEl.innerText), newHum, 1000);
+            if(lightEl.innerText === '--') lightEl.innerText = newLight; else animateValue(lightEl, parseInt(lightEl.innerText), newLight, 1000);
+
+            const updateThresholdUI = (type, minId, maxId) => {
+                const min = parseFloat(findVal(minId) || 0);
+                const max = parseFloat(findVal(maxId) || 100);
+                document.getElementById(`disp-${type}`).innerText = `${min} ~ ${max}`;
+                
+                const inMin = document.getElementById(`in-${type}-min`);
+                const inMax = document.getElementById(`in-${type}-max`);
+                if (document.activeElement !== inMin) inMin.value = min;
+                if (document.activeElement !== inMax) inMax.value = max;
+
+                currentData[type].val = type === 'light' ? newLight : (type === 'temp' ? newTemp : newHum);
+                currentData[type].min = min;
+                currentData[type].max = max;
+            };
+            updateThresholdUI('temp', 'temp_low', 'temp_high');
+            updateThresholdUI('hum', 'humi_low', 'humi_high'); 
+            updateThresholdUI('light', 'light_low', 'light_high');
+
+            const updateSwitch = (devKey, powerId, modeId) => {
+                const isOn = (findVal(powerId === 'light' ? 'light_device' : powerId) === "true");
+                const isManual = (findVal(modeId) === "true");
+                deviceState[devKey] = { on: isOn, mode: isManual };
+                
+                const btnMode = document.getElementById(`btn-${devKey}-mode`);
+                const btnPower = document.getElementById(`btn-${devKey}-power`);
+                
+                btnMode.className = isManual ? "c-btn active" : "c-btn";
+                btnMode.innerText = isManual ? "手动" : "自动";
+                
+                btnPower.className = isOn ? "c-btn power-on active" : "c-btn";
+                btnPower.innerText = isOn ? "ON" : "OFF";
+            };
+            updateSwitch('light', 'light', 'light_mode');
+            updateSwitch('fan', 'fan', 'fan_mode');
+            updateSwitch('spray', 'spray', 'spray_mode');
+            updateSwitch('heater', 'heater', 'heater_mode');
+
+            checkAlarms();
+        }
+
+        async function syncSystemTime() {
+            const btn = document.getElementById('btn-time-sync');
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+            btn.disabled = true;
+            const now = new Date();
+            const timeParams = {
+                year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate(),
+                hour: now.getHours(), minute: now.getMinutes(), second: now.getSeconds()
+            };
+            const success = await sendCommand(timeParams);
+            btn.disabled = false;
+            if (success) {
+                btn.innerHTML = '<i class="ri-check-line" style="color:var(--primary)"></i>';
+                setTimeout(() => btn.innerHTML = '<i class="ri-refresh-line"></i>', 2000);
+            } else {
+                btn.innerHTML = '<i class="ri-close-line" style="color:var(--danger)"></i>';
+                setTimeout(() => btn.innerHTML = '<i class="ri-refresh-line"></i>', 2000);
+            }
+        }
+
+        async function sendCommand(params) {
+            try {
+                const response = await fetch(URL_CONTROL, {
+                    method: 'POST',
+                    headers: { ...API_HEADERS, "Content-Type": "application/json" },
+                    body: JSON.stringify({ product_id: "fNEs9rp3YO", device_name: "test123", params: params })
+                });
+                const json = await response.json();
+                return json.code === 0;
+            } catch (e) { return false; }
+        }
+
+        async function applyThresholds(type) {
+            const btn = event.currentTarget;
+            const originalIcon = btn.innerHTML;
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+            const min = parseFloat(document.getElementById(`in-${type}-min`).value);
+            const max = parseFloat(document.getElementById(`in-${type}-max`).value);
+            if(isNaN(min) || isNaN(max) || min >= max) {
+                alert("请输入有效范围");
+                btn.innerHTML = originalIcon;
+                return;
+            }
+            let params = {};
+            if(type === 'temp') { params.temp_low = min; params.temp_high = max; }
+            else if(type === 'hum') { params.humi_low = min; params.humi_high = max; } 
+            else { params.light_low = min; params.light_high = max; }
+            if(await sendCommand(params)) btn.innerHTML = '<i class="ri-check-line"></i>';
+            else btn.innerHTML = '<i class="ri-close-line"></i>';
+            setTimeout(() => btn.innerHTML = originalIcon, 2000);
+        }
+
+        async function toggleMode(devKey) {
+            const idMap = { light: 'light_mode', fan: 'fan_mode', spray: 'spray_mode', heater: 'heater_mode' };
+            await sendCommand({ [idMap[devKey]]: !deviceState[devKey].mode });
+            setTimeout(fetchLatestData, 500);
+        }
+        async function togglePower(devKey) {
+            if (!deviceState[devKey].mode) return alert(`请先切换到手动模式`);
+            const idMap = { light: 'light_device', fan: 'fan', spray: 'spray', heater: 'heater' };
+            await sendCommand({ [idMap[devKey]]: !deviceState[devKey].on });
+            setTimeout(fetchLatestData, 500);
+        }
+
+        async function fetchHistorySingle(identifier) {
+            const now = Date.now(); 
+            const url = new URL(URL_HISTORY);
+            url.searchParams.append("product_id", "fNEs9rp3YO"); url.searchParams.append("device_name", "test123");
+            url.searchParams.append("identifier", identifier); url.searchParams.append("start_time", now - 18000000); 
+            url.searchParams.append("end_time", now); url.searchParams.append("limit", "100");
+            try {
+                const res = await fetch(url, { headers: API_HEADERS });
+                const json = await res.json();
+                if (json.data?.list) {
+                    const list = json.data.list.reverse();
+                    return { x: list.map(i => new Date(i.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})), y: list.map(i => i.value) };
+                }
+            } catch(e){}
+            return { x:[], y:[] };
+        }
+
+        async function fetchAllHistory() {
+            myChart.showLoading({ text: 'Loading...', color: '#10b981', textColor: '#10b981', maskColor: 'rgba(255, 255, 255, 0.6)' });
+            const [t, h, l] = await Promise.all([fetchHistorySingle('temperature'), fetchHistorySingle('humidity'), fetchHistorySingle('light')]);
+            historyCache = { temp: t, hum: h, light: l };
+            renderChart(currentChartType);
+            myChart.hideLoading();
+        }
+
+        function switchHistoryChart(type, btn) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentChartType = type;
+            renderChart(type);
+        }
+
+        function renderChart(type) {
+            const data = historyCache[type];
+            const arr = data.y.map(Number);
+            if(arr.length > 0) {
+                document.getElementById('hist-max').innerText = Math.max(...arr).toFixed(1);
+                document.getElementById('hist-min').innerText = Math.min(...arr).toFixed(1);
+                const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+                document.getElementById('hist-avg').innerText = avg.toFixed(1);
+            }
+
+            let colorStops = [{ offset: 0, color: 'rgba(16, 185, 129, 0.4)' }, { offset: 1, color: 'rgba(16, 185, 129, 0.01)' }];
+            let lineColor = '#10b981';
+            if (type === 'temp') { lineColor = '#ef4444'; colorStops = [{ offset: 0, color: 'rgba(239, 68, 68, 0.4)' }, { offset: 1, color: 'rgba(239, 68, 68, 0.01)' }]; }
+            if (type === 'hum') { lineColor = '#3b82f6'; colorStops = [{ offset: 0, color: 'rgba(59, 130, 246, 0.4)' }, { offset: 1, color: 'rgba(59, 130, 246, 0.01)' }]; }
+            if (type === 'light') { lineColor = '#f59e0b'; colorStops = [{ offset: 0, color: 'rgba(245, 158, 11, 0.4)' }, { offset: 1, color: 'rgba(245, 158, 11, 0.01)' }]; }
+
+            myChart.setOption({
+                tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 12, padding: 12, border: 'none', shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.1)' },
+                grid: { left: '2%', right: '3%', bottom: '2%', top: '10%', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, data: data.x, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color: '#64748b'} },
+                yAxis: { type: 'value', splitLine: { lineStyle: { type: 'dashed', color: 'rgba(0,0,0,0.1)' } } },
+                series: [{
+                    type: 'line', smooth: true, showSymbol: true, symbol: 'circle', symbolSize: 6,
+                    data: data.y,
+                    lineStyle: { width: 3, color: lineColor, shadowColor: lineColor, shadowBlur: 10 },
+                    itemStyle: { color: lineColor, borderColor: '#fff', borderWidth: 2 },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, colorStops) }
+                }]
+            });
+        }
+
+        // === 核心逻辑：环境感知与报警 ===
+        function checkAlarms() {
+            let hasAlarm = false;
+            ['temp', 'hum', 'light'].forEach(t => {
+                const d = currentData[t];
+                if(d.val > d.max || d.val < d.min) {
+                    hasAlarm = true;
+                    const list = document.getElementById('alarm-log-list');
+                    if(list.innerText.includes("暂无")) list.innerHTML = "";
+                    const item = document.createElement('div');
+                    item.className = "log-item";
+                    item.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> <span class="log-tag">${d.name}异常: ${d.val}</span>`;
+                    list.prepend(item);
+                }
+            });
+            
+            const alarmBox = document.getElementById('alarm-alert');
+            const normalBox = document.getElementById('normal-alert');
+            
+            // 切换报警模式
+            if(hasAlarm) { 
+                alarmBox.classList.add('show-flex'); normalBox.classList.remove('show-flex'); 
+                document.body.classList.add('theme-alarm'); // 开启全屏红光
+            } else { 
+                alarmBox.classList.remove('show-flex'); normalBox.classList.add('show-flex'); 
+                document.body.classList.remove('theme-alarm'); // 关闭报警
+            }
+        }
+
+        function clearLogs() { document.getElementById('alarm-log-list').innerHTML = '<div style="text-align:center; color:var(--text-sub); margin-top:60px;">暂无异常</div>'; }
+        
+        function updateClockAndTheme() {
+            const now = new Date();
+            const dateStr = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,'0') + "-" + String(now.getDate()).padStart(2,'0') + " " + now.toLocaleTimeString('zh-CN', {hour12:false});
+            document.getElementById('clock').innerText = dateStr;
+
+            // 自动昼夜切换 (6点到18点为白天)
+            const hour = now.getHours();
+            if (hour >= 6 && hour < 18) {
+                document.body.classList.remove('theme-night');
+            } else {
+                document.body.classList.add('theme-night');
+            }
+        }
+
+        window.onload = () => {
+            setInterval(updateClockAndTheme, 1000);
+            updateClockAndTheme(); // 初始化执行一次
+            myChart = echarts.init(document.getElementById('mainChart'));
+            window.addEventListener('resize', () => myChart.resize());
+            fetchLatestData(); setInterval(fetchLatestData, 3000);
+            fetchAllHistory(); setInterval(fetchAllHistory, 300000);
+        };
+    </script>
+</body>
+</html>
